@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>骰子投掷数据收集系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/leancloud-storage@4.15.0/dist/av-min.js"></script>
+    
+    <!-- 配置Tailwind -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4F46E5',
+                        secondary: '#10B981',
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .btn-effect {
+                @apply transition-all duration-200 hover:shadow-lg active:scale-95;
+            }
+            .sum-input {
+                @apply w-full text-center py-2 px-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-lg;
+            }
+            .group-row {
+                @apply cursor-pointer hover:bg-blue-50 transition-colors;
+            }
+            .stats-table th, .stats-table td {
+                @apply text-lg font-bold px-4 py-3 border border-gray-300 text-center;
+            }
+            .chart-container {
+                @apply h-64 bg-white p-4 rounded-lg border border-gray-200 mb-6;
+            }
+            .group-chart-wrapper {
+                @apply mb-8;
+            }
+            .details-row {
+                @apply bg-gray-50 transition-all duration-300;
+            }
+            .rotate-icon {
+                @apply transform transition-transform duration-300 rotate-90;
+            }
+            .collapsed-row {
+                @apply bg-gray-50 text-gray-500 italic;
+            }
+            .number-control {
+                @apply flex flex-col items-center justify-center gap-1 w-16 mx-auto;
+            }
+            .control-btn {
+                @apply w-full h-8 flex items-center justify-center rounded-md text-white font-bold transition-all text-sm;
+            }
+            .increment-btn {
+                @apply bg-green-500 hover:bg-green-600;
+            }
+            .decrement-btn {
+                @apply bg-red-500 hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl font-bold text-primary mb-2">骰子投掷数据收集系统</h1>
+            <p class="text-gray-600">记录骰子投掷结果并进行数据分析</p>
+        </header>
+
+        <!-- 角色选择页面 -->
+        <div id="role-selection" class="block">
+            <div class="bg-white rounded-xl shadow-lg p-6 max-w-2xl mx-auto">
+                <h2 class="text-2xl font-bold text-center mb-6">请选择您的角色</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button id="student-btn" class="bg-primary text-white rounded-lg p-5 text-center btn-effect">
+                        <i class="fa fa-users text-4xl mb-3"></i>
+                        <h3 class="text-xl font-semibold">学生端</h3>
+                        <p class="mt-1 text-white/80">输入投掷结果</p>
+                    </button>
+                    <button id="teacher-btn" class="bg-secondary text-white rounded-lg p-5 text-center btn-effect">
+                        <i class="fa fa-briefcase text-4xl mb-3"></i>
+                        <h3 class="text-xl font-semibold">教师端</h3>
+                        <p class="mt-1 text-white/80">查看统计数据</p>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 学生端页面 -->
+        <div id="student-page" class="hidden">
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-primary">学生端 - 输入投掷结果</h2>
+                    <button id="student-back" class="text-gray-500 hover:text-gray-700 btn-effect">
+                        <i class="fa fa-arrow-left mr-1"></i> 返回
+                    </button>
+                </div>
+                
+                <!-- 学生信息 -->
+                <div class="mb-6">
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <div class="flex-1">
+                            <label for="group-number" class="block text-sm font-medium text-gray-700 mb-1">组号</label>
+                            <input type="text" id="group-number" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary" placeholder="请输入组号">
+                        </div>
+                        <div class="flex-1">
+                            <label for="student-class" class="block text-sm font-medium text-gray-700 mb-1">班级</label>
+                            <input type="text" id="student-class" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary" placeholder="请输入班级">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 表格输入区域 -->
+                <div class="mb-6 p-5 bg-gray-50 rounded-xl border border-gray-200 overflow-x-auto">
+                    <h3 class="text-xl font-semibold mb-4 text-center">骰子总和出现次数</h3>
+                    <p class="text-center text-gray-600 mb-4">请输入两个骰子总和(2-12)各自出现的次数</p>
+                    
+                    <div class="overflow-x-auto -mx-2">
+                        <table class="min-w-full border-collapse">
+                            <thead>
+                                <tr class="bg-gray-100">
+                                    <th class="px-2 sm:px-3 py-3 border border-gray-300 text-center font-semibold">总和</th>
+                                    <!-- 动态生成2-12的表头 -->
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="px-2 sm:px-3 py-3 border border-gray-300 text-center font-medium">出现次数</td>
+                                    <!-- 动态生成输入框 -->
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="mt-4 flex flex-wrap justify-center gap-3">
+                        <button id="calculate-total" class="bg-primary text-white font-semibold py-2 px-5 rounded-lg btn-effect">
+                            <i class="fa fa-calculator mr-1"></i> 计算总次数
+                        </button>
+                        <button id="clear-counts" class="bg-gray-500 text-white font-semibold py-2 px-5 rounded-lg btn-effect">
+                            <i class="fa fa-trash-o mr-1"></i> 清空数据
+                        </button>
+                    </div>
+                    
+                    <div class="mt-3 text-center">
+                        <p class="text-gray-600"><span class="font-medium">总投掷次数：</span><span id="total-counts" class="text-primary font-semibold">0</span></p>
+                    </div>
+                    
+                    <div id="input-error" class="text-center text-red-500 mt-2 hidden">
+                        <i class="fa fa-exclamation-circle mr-1"></i> 请输入非负整数
+                    </div>
+                </div>
+                
+                <!-- 图表区域 -->
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">投掷结果统计</h3>
+                    <div class="h-64">
+                        <canvas id="student-chart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 提交按钮 -->
+                <div class="text-center">
+                    <button id="submit-btn" class="bg-secondary text-white font-semibold py-2 px-8 rounded-lg btn-effect disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+                        <i class="fa fa-paper-plane mr-1"></i> 提交数据
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 教师端页面 -->
+        <div id="teacher-page" class="hidden">
+            <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-2xl font-bold text-secondary">教师端 - 数据查看</h2>
+                    <button id="teacher-back" class="text-gray-500 hover:text-gray-700 btn-effect">
+                        <i class="fa fa-arrow-left mr-1"></i> 返回
+                    </button>
+                </div>
+                
+                <!-- 数据控制 -->
+                <div class="mb-6 flex flex-col md:flex-row justify-between gap-4">
+                    <div class="flex gap-4">
+                        <button id="refresh-data" class="bg-primary text-white font-medium py-2 px-4 rounded-lg btn-effect">
+                            <i class="fa fa-refresh mr-1"></i> 刷新数据
+                        </button>
+                        <button id="clear-all-data" class="bg-red-500 text-white font-medium py-2 px-4 rounded-lg btn-effect">
+                            <i class="fa fa-trash mr-1"></i> 清除所有数据
+                        </button>
+                    </div>
+                    <div>
+                        <label for="class-filter" class="block text-sm font-medium text-gray-700 mb-1">按班级筛选</label>
+                        <select id="class-filter" class="w-full md:w-48 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-secondary">
+                            <option value="all">所有班级</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- 数据统计卡片 -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                        <p class="text-sm text-blue-600">总提交组数</p>
+                        <p id="total-groups" class="text-2xl font-bold text-blue-800">0</p>
+                    </div>
+                    <div class="bg-green-50 rounded-lg p-4 border border-green-100">
+                        <p class="text-sm text-green-600">总投掷次数</p>
+                        <p id="total-rolls" class="text-2xl font-bold text-green-800">0</p>
+                    </div>
+                    <div class="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                        <p class="text-sm text-purple-600">参与班级数</p>
+                        <p id="total-classes" class="text-2xl font-bold text-purple-800">0</p>
+                    </div>
+                </div>
+                
+                <!-- 各小组数据 - 带展开收起功能 -->
+                <div class="mb-6">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-xl font-semibold">各小组数据</h3>
+                        <div class="flex gap-2">
+                            <button id="expand-all" class="bg-secondary/10 text-secondary text-sm font-medium py-1 px-3 rounded-lg btn-effect">
+                                <i class="fa fa-plus-square-o mr-1"></i> 展开所有
+                            </button>
+                            <button id="collapse-all" class="bg-gray-200 text-gray-700 text-sm font-medium py-1 px-3 rounded-lg btn-effect">
+                                <i class="fa fa-minus-square-o mr-1"></i> 折叠所有
+                            </button>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto bg-white rounded-lg border border-gray-200">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead>
+                                <tr>
+                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">展开/收起</th>
+                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">组号</th>
+                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">班级</th>
+                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">投掷次数</th>
+                                    <th class="px-4 py-3 bg-gray-50 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">提交时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="groups-data" class="divide-y divide-gray-200">
+                                <!-- 数据将动态加载 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 各小组投掷结果统计图 - 一行三个 -->
+                <div class="group-chart-wrapper">
+                    <h3 class="text-xl font-semibold mb-3">各小组投掷结果统计</h3>
+                    <div id="all-groups-charts" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <!-- 小组图表将动态生成在这里 -->
+                    </div>
+                </div>
+                
+                <!-- 骰子点数和分布统计 -->
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-3">骰子点数和分布统计</h3>
+                    
+                    <!-- 点数和分布统计表 -->
+                    <div class="overflow-x-auto mb-4 bg-white p-4 rounded-lg border border-gray-200">
+                        <table class="min-w-full border-collapse stats-table">
+                            <tbody>
+                                <tr class="bg-gray-100">
+                                    <td class="border border-gray-300">点数和</td>
+                                    <td class="border border-gray-300">2</td>
+                                    <td class="border border-gray-300">3</td>
+                                    <td class="border border-gray-300">4</td>
+                                    <td class="border border-gray-300">5</td>
+                                    <td class="border border-gray-300">6</td>
+                                    <td class="border border-gray-300">7</td>
+                                    <td class="border border-gray-300">8</td>
+                                    <td class="border border-gray-300">9</td>
+                                    <td class="border border-gray-300">10</td>
+                                    <td class="border border-gray-300">11</td>
+                                    <td class="border border-gray-300">12</td>
+                                </tr>
+                                <tr id="total-sum-row">
+                                    <td class="border border-gray-300 bg-gray-50">出现次数</td>
+                                    <!-- 动态生成2-12的出现次数 -->
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <!-- 点数和统计图表 -->
+                    <div class="chart-container">
+                        <canvas id="teacher-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 教师密码验证 -->
+        <div id="teacher-auth" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full">
+                <h3 class="text-xl font-bold text-center mb-4">教师身份验证</h3>
+                <div class="mb-4">
+                    <label for="teacher-password" class="block text-sm font-medium text-gray-700 mb-1">请输入密码</label>
+                    <input type="password" id="teacher-password" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-secondary focus:border-secondary" placeholder="教师密码">
+                    <p id="password-error" class="text-red-500 text-sm mt-1 hidden">密码错误，请重试</p>
+                </div>
+                <div class="flex gap-3">
+                    <button id="cancel-auth" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg btn-effect">取消</button>
+                    <button id="confirm-auth" class="flex-1 bg-secondary text-white py-2 px-4 rounded-lg btn-effect">确认</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提交成功提示 -->
+        <div id="success-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4 text-center">
+                <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fa fa-check text-2xl text-green-500"></i>
+                </div>
+                <h3 class="text-xl font-bold mb-2">提交成功！</h3>
+                <p class="text-gray-600 mb-4">您的骰子投掷数据已成功提交</p>
+                <button id="close-modal" class="bg-primary text-white font-semibold py-2 px-6 rounded-lg btn-effect">
+                    确定
+                </button>
+            </div>
+        </div>
+
+        <!-- 确认清除数据 -->
+        <div id="confirm-clear" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+                <h3 class="text-xl font-bold mb-4">确认清除所有数据</h3>
+                <p class="text-gray-600 mb-6">此操作将删除所有已提交的数据，且无法恢复。确定要继续吗？</p>
+                <div class="flex gap-3">
+                    <button id="cancel-clear" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 px-4 rounded-lg btn-effect">取消</button>
+                    <button id="do-clear" class="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg btn-effect">确认清除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 初始化LeanCloud
+        AV.init({
+            appId: "80htTonUgthenJR5plf1PDbU-gzGzoHsz",
+            appKey: "PzJobxHdJ9cD2h041Gtyetrw",
+            serverURLs: "https://80httonu.lc-cn-n1-shared.com"
+        });
+
+        // 页面元素
+        const roleSelection = document.getElementById('role-selection');
+        const studentPage = document.getElementById('student-page');
+        const teacherPage = document.getElementById('teacher-page');
+        const teacherAuth = document.getElementById('teacher-auth');
+        
+        // 角色选择按钮
+        const studentBtn = document.getElementById('student-btn');
+        const teacherBtn = document.getElementById('teacher-btn');
+        
+        // 返回按钮
+        const studentBack = document.getElementById('student-back');
+        const teacherBack = document.getElementById('teacher-back');
+        
+        // 学生端元素
+        const groupNumber = document.getElementById('group-number');
+        const studentClass = document.getElementById('student-class');
+        const calculateTotalBtn = document.getElementById('calculate-total');
+        const clearCountsBtn = document.getElementById('clear-counts');
+        const totalCountsEl = document.getElementById('total-counts');
+        const inputError = document.getElementById('input-error');
+        const submitBtn = document.getElementById('submit-btn');
+        const successModal = document.getElementById('success-modal');
+        const closeModal = document.getElementById('close-modal');
+        
+        // 教师端元素
+        const refreshDataBtn = document.getElementById('refresh-data');
+        const clearAllDataBtn = document.getElementById('clear-all-data');
+        const classFilter = document.getElementById('class-filter');
+        const totalGroupsEl = document.getElementById('total-groups');
+        const totalRollsEl = document.getElementById('total-rolls');
+        const totalClassesEl = document.getElementById('total-classes');
+        const groupsDataEl = document.getElementById('groups-data');
+        const confirmClearModal = document.getElementById('confirm-clear');
+        const cancelClearBtn = document.getElementById('cancel-clear');
+        const doClearBtn = document.getElementById('do-clear');
+        const totalSumRow = document.getElementById('total-sum-row');
+        const allGroupsCharts = document.getElementById('all-groups-charts');
+        const expandAllBtn = document.getElementById('expand-all');
+        const collapseAllBtn = document.getElementById('collapse-all');
+        
+        // 教师验证元素
+        const teacherPassword = document.getElementById('teacher-password');
+        const confirmAuthBtn = document.getElementById('confirm-auth');
+        const cancelAuthBtn = document.getElementById('cancel-auth');
+        const passwordError = document.getElementById('password-error');
+        
+        // 数据存储
+        let sumInputs = [];
+        let studentChart = null;
+        let teacherChart = null;
+        let groupCharts = []; // 存储所有小组图表实例
+        let allData = [];
+        let filteredData = [];
+        let isAllCollapsed = false; // 记录是否全部折叠状态
+        
+        // 页面切换函数
+        function showPage(pageId) {
+            document.querySelectorAll('#role-selection, #student-page, #teacher-page, #teacher-auth').forEach(el => {
+                el.classList.add('hidden');
+            });
+            document.getElementById(pageId).classList.remove('hidden');
+        }
+        
+        // 初始化学生表格 - 按钮上下布局
+        function initStudentTable() {
+            const tableHead = document.querySelector('.overflow-x-auto table thead tr');
+            const tableBody = document.querySelector('.overflow-x-auto table tbody tr');
+            
+            // 清空现有内容
+            while (tableHead.children.length > 1) tableHead.removeChild(tableHead.lastChild);
+            while (tableBody.children.length > 1) tableBody.removeChild(tableBody.lastChild);
+            
+            sumInputs = [];
+            
+            // 生成2-12的表头和输入框
+            for (let sum = 2; sum <= 12; sum++) {
+                // 创建表头
+                const th = document.createElement('th');
+                th.className = 'px-2 sm:px-3 py-3 border border-gray-300 text-center font-semibold';
+                th.textContent = sum;
+                tableHead.appendChild(th);
+                
+                // 创建输入框单元格 - 按钮在上下方
+                const td = document.createElement('td');
+                td.className = 'px-1 sm:px-2 py-2 border border-gray-300';
+                
+                // 创建数字控制容器 - 垂直布局
+                const controlContainer = document.createElement('div');
+                controlContainer.className = 'number-control';
+                
+                // 增加按钮（上方）
+                const incrementBtn = document.createElement('button');
+                incrementBtn.className = 'control-btn increment-btn';
+                incrementBtn.innerHTML = '<i class="fa fa-plus"></i>';
+                
+                // 输入框（中间）- 显示选中的数字
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = 0;
+                input.value = 0;
+                input.className = 'sum-input';
+                input.dataset.sum = sum;
+                
+                // 减少按钮（下方）
+                const decrementBtn = document.createElement('button');
+                decrementBtn.className = 'control-btn decrement-btn';
+                decrementBtn.innerHTML = '<i class="fa fa-minus"></i>';
+                decrementBtn.disabled = true; // 初始值为0，禁用减少按钮
+                
+                // 组装控件（上-中-下）
+                controlContainer.appendChild(incrementBtn);
+                controlContainer.appendChild(input);
+                controlContainer.appendChild(decrementBtn);
+                td.appendChild(controlContainer);
+                tableBody.appendChild(td);
+                sumInputs.push(input);
+                
+                // 增加按钮事件
+                incrementBtn.addEventListener('click', function() {
+                    let value = parseInt(input.value) || 0;
+                    input.value = value + 1;
+                    decrementBtn.disabled = false; // 大于0时启用减少按钮
+                    validateInput(input);
+                    updateTotalCounts();
+                    updateStudentChart();
+                    checkSubmitEnabled();
+                });
+                
+                // 减少按钮事件
+                decrementBtn.addEventListener('click', function() {
+                    let value = parseInt(input.value) || 0;
+                    if (value > 0) {
+                        input.value = value - 1;
+                        decrementBtn.disabled = value - 1 === 0; // 等于0时禁用减少按钮
+                        validateInput(input);
+                        updateTotalCounts();
+                        updateStudentChart();
+                        checkSubmitEnabled();
+                    }
+                });
+                
+                // 输入框事件
+                input.addEventListener('input', function() {
+                    // 确保值为非负整数
+                    let value = parseInt(this.value) || 0;
+                    if (value < 0) value = 0;
+                    this.value = value;
+                    
+                    // 更新减少按钮状态
+                    decrementBtn.disabled = value === 0;
+                    
+                    validateInput(this);
+                    updateTotalCounts();
+                    updateStudentChart();
+                    checkSubmitEnabled();
+                });
+                
+                // 失去焦点时确保值有效
+                input.addEventListener('blur', function() {
+                    let value = parseInt(this.value) || 0;
+                    if (isNaN(value) || value < 0) value = 0;
+                    this.value = value;
+                    decrementBtn.disabled = value === 0;
+                });
+            }
+        }
+        
+        // 验证输入
+        function validateInput(input) {
+            const value = input.value.trim();
+            if (value === '') {
+                input.value = 0;
+                inputError.classList.add('hidden');
+                return true;
+            }
+            
+            const num = parseInt(value, 10);
+            if (isNaN(num) || num < 0 || !Number.isInteger(num)) {
+                inputError.classList.remove('hidden');
+                return false;
+            }
+            
+            inputError.classList.add('hidden');
+            return true;
+        }
+        
+        // 实时更新总次数
+        function updateTotalCounts() {
+            let total = 0;
+            let isValid = true;
+            
+            sumInputs.forEach(input => {
+                const value = input.value.trim();
+                const num = value === '' ? 0 : parseInt(value, 10);
+                
+                if (isNaN(num) || num < 0 || !Number.isInteger(num)) {
+                    isValid = false;
+                    return;
+                }
+                
+                total += num;
+            });
+            
+            if (!isValid) {
+                inputError.classList.remove('hidden');
+                return;
+            }
+            
+            inputError.classList.add('hidden');
+            totalCountsEl.textContent = total;
+        }
+        
+        // 计算总次数（按钮触发）
+        function calculateTotalCounts() {
+            updateTotalCounts();
+        }
+        
+        // 清空数据
+        function clearAllCounts() {
+            sumInputs.forEach(input => {
+                input.value = 0;
+                // 更新对应减少按钮状态
+                const decrementBtn = input.parentElement.querySelector('.decrement-btn');
+                if (decrementBtn) decrementBtn.disabled = true;
+            });
+            totalCountsEl.textContent = '0';
+            inputError.classList.add('hidden');
+            updateStudentChart();
+            checkSubmitEnabled();
+        }
+        
+        // 初始化学生图表
+        function initStudentChart() {
+            const ctx = document.getElementById('student-chart').getContext('2d');
+            
+            if (studentChart) studentChart.destroy();
+            
+            studentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 11}, (_, i) => i + 2),
+                    datasets: [{
+                        label: '出现次数',
+                        data: Array(11).fill(0),
+                        backgroundColor: 'rgba(79, 70, 229, 0.7)',
+                        borderColor: 'rgba(79, 70, 229, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                    }
+                }
+            });
+        }
+        
+        // 更新学生图表
+        function updateStudentChart() {
+            if (!studentChart) initStudentChart();
+            
+            const sums = Array(11).fill(0);
+            sumInputs.forEach(input => {
+                const sum = parseInt(input.dataset.sum);
+                const value = parseInt(input.value) || 0;
+                sums[sum - 2] = value;
+            });
+            
+            studentChart.data.datasets[0].data = sums;
+            studentChart.update();
+        }
+        
+        // 提交数据
+        function submitData() {
+            const group = groupNumber.value.trim();
+            const className = studentClass.value.trim();
+            
+            // 实时计算总次数
+            let totalRolls = 0;
+            let isValid = true;
+            
+            sumInputs.forEach(input => {
+                const value = input.value.trim();
+                const num = value === '' ? 0 : parseInt(value, 10);
+                
+                if (isNaN(num) || num < 0 || !Number.isInteger(num)) {
+                    isValid = false;
+                    return;
+                }
+                
+                totalRolls += num;
+            });
+            
+            if (!isValid) {
+                inputError.classList.remove('hidden');
+                return;
+            }
+            
+            if (!group || !className) {
+                alert('请输入组号和班级');
+                return;
+            }
+            
+            if (totalRolls === 0) {
+                alert('请输入至少一次投掷记录');
+                return;
+            }
+            
+            // 收集数据
+            const sumCounts = Array(11).fill(0);
+            sumInputs.forEach(input => {
+                const sum = parseInt(input.dataset.sum);
+                sumCounts[sum - 2] = parseInt(input.value) || 0;
+            });
+            
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> 提交中...';
+            
+            // 保存到LeanCloud
+            const DiceData = AV.Object.extend('DiceData');
+            const diceData = new DiceData();
+            
+            diceData.set('group', group);
+            diceData.set('className', className);
+            diceData.set('sumCounts', sumCounts);
+            diceData.set('totalRolls', totalRolls);
+            diceData.set('submitTime', new Date());
+            
+            diceData.save().then(() => {
+                successModal.classList.remove('hidden');
+                submitBtn.innerHTML = '<i class="fa fa-paper-plane mr-1"></i> 提交数据';
+                submitBtn.disabled = false;
+            }).catch(error => {
+                console.error('提交失败:', error);
+                alert('提交失败，请重试');
+                submitBtn.innerHTML = '<i class="fa fa-paper-plane mr-1"></i> 提交数据';
+                submitBtn.disabled = false;
+            });
+        }
+        
+        // 检查提交按钮状态
+        function checkSubmitEnabled() {
+            const group = groupNumber.value.trim();
+            const className = studentClass.value.trim();
+            
+            // 计算当前总次数
+            let totalRolls = 0;
+            let isValid = true;
+            
+            sumInputs.forEach(input => {
+                const value = input.value.trim();
+                const num = value === '' ? 0 : parseInt(value, 10);
+                
+                if (isNaN(num) || num < 0 || !Number.isInteger(num)) {
+                    isValid = false;
+                    return;
+                }
+                
+                totalRolls += num;
+            });
+            
+            submitBtn.disabled = !(isValid && group && className && totalRolls > 0);
+        }
+        
+        // 初始化教师图表
+        function initTeacherChart() {
+            const ctx = document.getElementById('teacher-chart').getContext('2d');
+            
+            if (teacherChart) teacherChart.destroy();
+            
+            teacherChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 11}, (_, i) => i + 2),
+                    datasets: [{
+                        label: '总出现次数',
+                        data: Array(11).fill(0),
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)',
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } }
+                    }
+                }
+            });
+        }
+        
+        // 更新教师图表和点数和分布统计表
+        function updateTeacherChart() {
+            if (!teacherChart) initTeacherChart();
+            
+            const sums = Array(11).fill(0);
+            filteredData.forEach(item => {
+                const counts = item.get('sumCounts') || Array(11).fill(0);
+                counts.forEach((count, index) => {
+                    sums[index] += count;
+                });
+            });
+            
+            // 更新图表
+            teacherChart.data.datasets[0].data = sums;
+            teacherChart.update();
+            
+            // 更新点数和分布统计表
+            updateTotalSumRow(sums);
+        }
+        
+        // 更新点数和分布统计表
+        function updateTotalSumRow(sums) {
+            // 清除现有数据单元格（保留第一个"出现次数"单元格）
+            while (totalSumRow.children.length > 1) {
+                totalSumRow.removeChild(totalSumRow.lastChild);
+            }
+            
+            // 生成2-12的出现次数单元格
+            sums.forEach((count, index) => {
+                const td = document.createElement('td');
+                td.className = 'border border-gray-300';
+                td.textContent = count;
+                totalSumRow.appendChild(td);
+            });
+        }
+        
+        // 创建小组图表 - 一行三个
+        function createGroupCharts() {
+            // 清除现有图表
+            allGroupsCharts.innerHTML = '';
+            groupCharts.forEach(chart => chart.destroy());
+            groupCharts = [];
+            
+            if (filteredData.length === 0) {
+                allGroupsCharts.innerHTML = `
+                    <div class="col-span-full text-center py-12 text-gray-500">
+                        暂无小组数据
+                    </div>
+                `;
+                return;
+            }
+            
+            // 按组号排序
+            const sortedData = [...filteredData].sort((a, b) => {
+                const groupA = parseInt(a.get('group')) || 0;
+                const groupB = parseInt(b.get('group')) || 0;
+                return groupA - groupB;
+            });
+            
+            // 为每个小组创建图表 - 一行三个
+            sortedData.forEach((item, index) => {
+                const group = item.get('group');
+                const className = item.get('className');
+                const sumCounts = item.get('sumCounts') || Array(11).fill(0);
+                
+                // 创建图表容器
+                const chartContainer = document.createElement('div');
+                chartContainer.className = 'chart-container';
+                chartContainer.innerHTML = `
+                    <h4 class="text-lg font-medium mb-2">${className} - ${group}</h4>
+                    <canvas id="group-chart-${index}"></canvas>
+                `;
+                allGroupsCharts.appendChild(chartContainer);
+                
+                // 创建图表
+                const ctx = document.getElementById(`group-chart-${index}`).getContext('2d');
+                const chart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: Array.from({length: 11}, (_, i) => i + 2),
+                        datasets: [{
+                            label: '出现次数',
+                            data: sumCounts,
+                            backgroundColor: `rgba(${79 + index * 30}, ${70 + index * 20}, ${229 - index * 10}, 0.7)`,
+                            borderColor: `rgba(${79 + index * 30}, ${70 + index * 20}, ${229 - index * 10}, 1)`,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: { beginAtZero: true, ticks: { precision: 0 } }
+                        }
+                    }
+                });
+                
+                groupCharts.push(chart);
+            });
+        }
+        
+        // 加载教师数据
+        function loadTeacherData() {
+            refreshDataBtn.disabled = true;
+            refreshDataBtn.innerHTML = '<i class="fa fa-spinner fa-spin mr-1"></i> 加载中...';
+            
+            const query = new AV.Query('DiceData');
+            query.descending('submitTime');
+            
+            query.find().then(results => {
+                allData = results;
+                filterTeacherData(classFilter.value);
+                refreshDataBtn.disabled = false;
+                refreshDataBtn.innerHTML = '<i class="fa fa-refresh mr-1"></i> 刷新数据';
+            }).catch(error => {
+                console.error('加载数据失败:', error);
+                alert('加载数据失败，请重试');
+                refreshDataBtn.disabled = false;
+                refreshDataBtn.innerHTML = '<i class="fa fa-refresh mr-1"></i> 刷新数据';
+            });
+        }
+        
+        // 过滤教师数据
+        function filterTeacherData(className) {
+            if (className === 'all') {
+                filteredData = [...allData];
+            } else {
+                filteredData = allData.filter(item => item.get('className') === className);
+            }
+            
+            // 更新统计
+            totalGroupsEl.textContent = filteredData.length;
+            
+            const totalRolls = filteredData.reduce((sum, item) => {
+                return sum + (item.get('totalRolls') || 0);
+            }, 0);
+            totalRollsEl.textContent = totalRolls;
+            
+            // 更新班级筛选
+            const classes = [...new Set(allData.map(item => item.get('className')))];
+            totalClassesEl.textContent = classes.length;
+            
+            // 更新班级下拉框
+            const currentValue = classFilter.value;
+            while (classFilter.options.length > 1) classFilter.remove(1);
+            
+            classes.forEach(cls => {
+                const option = document.createElement('option');
+                option.value = cls;
+                option.textContent = cls;
+                classFilter.appendChild(option);
+            });
+            
+            if (currentValue && classes.includes(currentValue)) {
+                classFilter.value = currentValue;
+            }
+            
+            // 更新数据列表
+            updateGroupsTable();
+            
+            // 生成所有小组的图表
+            createGroupCharts();
+            
+            // 更新点数和统计图表和表格
+            updateTeacherChart();
+        }
+        
+        // 更新小组数据表格
+        function updateGroupsTable() {
+            groupsDataEl.innerHTML = '';
+            
+            if (filteredData.length === 0) {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">
+                        暂无数据
+                    </td>
+                `;
+                groupsDataEl.appendChild(row);
+                return;
+            }
+            
+            // 按组号排序显示
+            const sortedData = [...filteredData].sort((a, b) => {
+                const groupA = parseInt(a.get('group')) || 0;
+                const groupB = parseInt(b.get('group')) || 0;
+                return groupA - groupB;
+            });
+            
+            sortedData.forEach((item, index) => {
+                const group = item.get('group');
+                const className = item.get('className');
+                const totalRolls = item.get('totalRolls');
+                const sumCounts = item.get('sumCounts') || Array(11).fill(0);
+                
+                const time = new Date(item.get('submitTime'));
+                const formattedTime = time.toLocaleString();
+                
+                // 创建主行（可点击展开/收起）
+                const mainRow = document.createElement('tr');
+                mainRow.className = 'group-row';
+                mainRow.dataset.index = index;
+                
+                mainRow.innerHTML = `
+                    <td class="px-4 py-3">
+                        <i class="fa fa-chevron-right text-gray-500 transition-transform duration-300 ${isAllCollapsed ? '' : 'rotate-icon'}"></i>
+                    </td>
+                    <td class="px-4 py-3">${group}</td>
+                    <td class="px-4 py-3">${className}</td>
+                    <td class="px-4 py-3">${totalRolls}</td>
+                    <td class="px-4 py-3 text-sm text-gray-600">${formattedTime}</td>
+                `;
+                
+                // 创建详情行
+                const detailsRow = document.createElement('tr');
+                detailsRow.className = 'details-row';
+                detailsRow.dataset.detailsFor = index;
+                detailsRow.classList.toggle('hidden', isAllCollapsed);
+                
+                // 构建点数和详情表格
+                let detailsTable = '<table class="min-w-full"><thead><tr><th class="px-2 py-2 text-left text-xs font-medium text-gray-500">点数和</th>';
+                for (let i = 2; i <= 12; i++) {
+                    detailsTable += `<th class="px-2 py-2 text-center text-xs font-medium text-gray-500">${i}</th>`;
+                }
+                detailsTable += '</tr></thead><tbody><tr><td class="px-2 py-2 text-left text-xs font-medium text-gray-700">出现次数</td>';
+                
+                sumCounts.forEach((count, i) => {
+                    detailsTable += `<td class="px-2 py-2 text-center text-sm">${count}</td>`;
+                });
+                
+                detailsTable += '</tr></tbody></table>';
+                
+                detailsRow.innerHTML = `
+                    <td colspan="5" class="px-4 py-3">
+                        <div class="overflow-x-auto">
+                            ${detailsTable}
+                        </div>
+                    </td>
+                `;
+                
+                // 添加点击事件以展开/收起详情
+                mainRow.addEventListener('click', function() {
+                    const chevron = this.querySelector('.fa-chevron-right');
+                    const targetDetails = document.querySelector(`tr[data-details-for="${this.dataset.index}"]`);
+                    
+                    chevron.classList.toggle('rotate-icon');
+                    targetDetails.classList.toggle('hidden');
+                });
+                
+                groupsDataEl.appendChild(mainRow);
+                groupsDataEl.appendChild(detailsRow);
+            });
+        }
+        
+        // 展开所有
+        function expandAll() {
+            isAllCollapsed = false;
+            
+            // 更新按钮状态
+            expandAllBtn.classList.remove('bg-gray-200', 'text-gray-700');
+            expandAllBtn.classList.add('bg-secondary/10', 'text-secondary');
+            collapseAllBtn.classList.remove('bg-secondary/10', 'text-secondary');
+            collapseAllBtn.classList.add('bg-gray-200', 'text-gray-700');
+            
+            // 展开所有行
+            document.querySelectorAll('.fa-chevron-right').forEach(icon => {
+                icon.classList.add('rotate-icon');
+            });
+            
+            document.querySelectorAll('.details-row').forEach(row => {
+                row.classList.remove('hidden');
+            });
+        }
+        
+        // 折叠所有
+        function collapseAll() {
+            isAllCollapsed = true;
+            
+            // 更新按钮状态
+            collapseAllBtn.classList.remove('bg-gray-200', 'text-gray-700');
+            collapseAllBtn.classList.add('bg-secondary/10', 'text-secondary');
+            expandAllBtn.classList.remove('bg-secondary/10', 'text-secondary');
+            expandAllBtn.classList.add('bg-gray-200', 'text-gray-700');
+            
+            // 折叠所有行
+            document.querySelectorAll('.fa-chevron-right').forEach(icon => {
+                icon.classList.remove('rotate-icon');
+            });
+            
+            document.querySelectorAll('.details-row').forEach(row => {
+                row.classList.add('hidden');
+            });
+        }
+        
+        // 清除所有数据
+        function clearAllData() {
+            const query = new AV.Query('DiceData');
+            query.find().then(results => {
+                return AV.Object.destroyAll(results);
+            }).then(() => {
+                allData = [];
+                filterTeacherData(classFilter.value);
+                confirmClearModal.classList.add('hidden');
+                alert('所有数据已清除');
+            }).catch(error => {
+                console.error('清除数据失败:', error);
+                alert('清除数据失败，请重试');
+            });
+        }
+        
+        // 事件监听
+        // 角色选择
+        studentBtn.addEventListener('click', () => {
+            showPage('student-page');
+            initStudentTable();
+            initStudentChart();
+        });
+        
+        teacherBtn.addEventListener('click', () => {
+            showPage('teacher-auth');
+            teacherPassword.value = '';
+            passwordError.classList.add('hidden');
+        });
+        
+        // 学生端返回
+        studentBack.addEventListener('click', () => {
+            showPage('role-selection');
+        });
+        
+        // 教师端返回
+        teacherBack.addEventListener('click', () => {
+            showPage('role-selection');
+        });
+        
+        // 学生端功能按钮
+        calculateTotalBtn.addEventListener('click', calculateTotalCounts);
+        clearCountsBtn.addEventListener('click', clearAllCounts);
+        submitBtn.addEventListener('click', submitData);
+        closeModal.addEventListener('click', () => {
+            successModal.classList.add('hidden');
+        });
+        
+        // 监听组号和班级输入
+        groupNumber.addEventListener('input', checkSubmitEnabled);
+        studentClass.addEventListener('input', checkSubmitEnabled);
+        
+        // 教师验证
+        confirmAuthBtn.addEventListener('click', () => {
+            if (teacherPassword.value === '123456') {
+                showPage('teacher-page');
+                loadTeacherData();
+                initTeacherChart();
+            } else {
+                passwordError.classList.remove('hidden');
+                teacherPassword.focus();
+            }
+        });
+        
+        cancelAuthBtn.addEventListener('click', () => {
+            showPage('role-selection');
+        });
+        
+        // 教师端功能按钮
+        refreshDataBtn.addEventListener('click', loadTeacherData);
+        
+        classFilter.addEventListener('change', (e) => {
+            filterTeacherData(e.target.value);
+        });
+        
+        clearAllDataBtn.addEventListener('click', () => {
+            confirmClearModal.classList.remove('hidden');
+        });
+        
+        cancelClearBtn.addEventListener('click', () => {
+            confirmClearModal.classList.add('hidden');
+        });
+        
+        doClearBtn.addEventListener('click', clearAllData);
+        
+        // 展开/折叠所有按钮
+        expandAllBtn.addEventListener('click', expandAll);
+        collapseAllBtn.addEventListener('click', collapseAll);
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initStudentChart();
+            initTeacherChart();
+        });
+    </script>
+</body>
+</html>
